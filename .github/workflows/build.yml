@@ -7,33 +7,34 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Download Garmin Connect IQ SDK
+      - name: Install dependencies
         run: |
-          SDK_URL="https://developer.garmin.com/downloads/connect-iq/sdks/connectiq-sdk-lin-4.2.4-2024-03-04-306b4af7a.zip"
-          curl -L "$SDK_URL" -o sdk.zip
-          unzip -q sdk.zip -d sdk
-          chmod +x sdk/bin/monkeyc
+          sudo apt-get update -q
+          sudo apt-get install -y -q curl unzip java-common
+
+      - name: Install Connect IQ SDK Manager (AppImage)
+        run: |
+          curl -Ls https://raw.githubusercontent.com/pcolby/connectiq-sdk-manager/main/install.sh | bash -r
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Download SDK via SDK Manager
+        run: |
+          sdkmanager install 4.2.4
+          echo "$HOME/.Garmin/ConnectIQ/Sdks/connectiq-sdk-4.2.4/bin" >> $GITHUB_PATH
 
       - name: Fix project structure
         run: |
           mkdir -p source resources
-          # Move .mc files to source/ if they are in root
           for f in *.mc; do [ -f "$f" ] && mv "$f" source/; done
-          # Move resource files to resources/ if they are in root
           for f in strings.xml settings.xml; do [ -f "$f" ] && mv "$f" resources/; done
-          ls -la source/ resources/
+          echo "=== source/ ===" && ls source/
+          echo "=== resources/ ===" && ls resources/
 
       - name: Write developer key
         run: |
@@ -41,7 +42,7 @@ jobs:
 
       - name: Compile .prg
         run: |
-          sdk/bin/monkeyc \
+          monkeyc \
             -f monkey.jungle \
             -o BodyTempGraph.prg \
             -y developer_key.der \
