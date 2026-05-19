@@ -1,0 +1,57 @@
+name: Build Garmin App
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Download Garmin Connect IQ SDK
+        run: |
+          SDK_URL="https://developer.garmin.com/downloads/connect-iq/sdks/connectiq-sdk-lin-4.2.4-2024-03-04-306b4af7a.zip"
+          curl -L "$SDK_URL" -o sdk.zip
+          unzip -q sdk.zip -d sdk
+          chmod +x sdk/bin/monkeyc
+
+      - name: Fix project structure
+        run: |
+          mkdir -p source resources
+          # Move .mc files to source/ if they are in root
+          for f in *.mc; do [ -f "$f" ] && mv "$f" source/; done
+          # Move resource files to resources/ if they are in root
+          for f in strings.xml settings.xml; do [ -f "$f" ] && mv "$f" resources/; done
+          ls -la source/ resources/
+
+      - name: Write developer key
+        run: |
+          echo "${{ secrets.DEVELOPER_KEY }}" | base64 -d > developer_key.der
+
+      - name: Compile .prg
+        run: |
+          sdk/bin/monkeyc \
+            -f monkey.jungle \
+            -o BodyTempGraph.prg \
+            -y developer_key.der \
+            -d fenix8 \
+            --warn
+          ls -lh BodyTempGraph.prg
+
+      - name: Upload .prg artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BodyTempGraph-fenix8
+          path: BodyTempGraph.prg
+          retention-days: 30
